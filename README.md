@@ -35,9 +35,6 @@ cd universal-flasher
 
 # Install requirements
 pip install -r requirements.txt
-
-# Download platform-tools (Windows)
-python flash.py --setup
 ```
 
 ## Requirements 📋
