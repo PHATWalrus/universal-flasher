@@ -118,12 +118,13 @@ jobs:
           exit 1
         }
       if: matrix.os == 'windows-latest'
-
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}
-        path: dist/${{ matrix.arch }}/*
+        path: dist/${{ matrix.arch }}/flasher-${{ matrix.arch }}*
+        if-no-files-found: error
         retention-days: 7
 
   release:
@@ -134,45 +135,69 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: artifacts
+        pattern: 'flasher-*'
+        merge-multiple: true
+
+
+    - name: Ensure version format (manual builds)
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      run: |
+        if [[ "${{ inputs.version }}" != v* ]]; then
+          echo "VERSION=v${{ inputs.version }}" >> $GITHUB_ENV
+        else
+          echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+        fi
     - name: Install lipo for Linux
       run: |
         wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
         chmod +x lipo_Linux_amd64
         sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
+
     - name: Create universal macOS binary
       run: |
         mkdir -p artifacts/universal
         lipo -create \
-          artifacts/flasher-macos-arm/flasher-arm64 \
-          artifacts/flasher-macos-intel/flasher-x86_64 \
+          artifacts/flasher-arm64 \
+          artifacts/flasher-x86_64 \
           -output artifacts/universal/flasher-macos
 
-    - name: Generate release notes
-      id: changelog
-      run: |
-        LATEST_TAG=$(git describe --tags --abbrev=0)
-        PREV_TAG=$(git describe --tags --abbrev=0 $LATEST_TAG^ 2>/dev/null || echo "")
-
-        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-        echo "# Release $LATEST_TAG" >> $GITHUB_ENV
-        if [ -n "$PREV_TAG" ]; then
-          echo "## Changes since $PREV_TAG" >> $GITHUB_ENV
-          git log --pretty=format:"- %s [%h]" $PREV_TAG..HEAD >> $GITHUB_ENV
-          echo -e "\n[Full changelog](https://github.com/$GITHUB_REPOSITORY/compare/$PREV_TAG...$LATEST_TAG)" >> $GITHUB_ENV
-        else
-          echo "## Initial Release" >> $GITHUB_ENV
-          git log --pretty=format:"- %s [%h]" >> $GITHUB_ENV
-        fi
-        echo "EOF" >> $GITHUB_ENV
-
-    - name: Create GitHub Release
+    - name: Create Automated Release
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref }}
         name: Release ${{ github.ref_name }}
-        body: ${{ env.RELEASE_NOTES }}
+        body: |
+          Production release - CI Built Assets
+          - Windows: flasher-x86_64.exe
+          - Linux: flasher-x86_64
+          - macOS Intel: flasher-x86_64
+          - macOS ARM: flasher-arm64
+          - Universal macOS: flasher-macos
         files: |
-          artifacts/flasher-*
-        draft: false
-        prerelease: false
+            artifacts/flasher-x86_64.exe
+            artifacts/flasher-x86_64
+            artifacts/flasher-arm64
+            artifacts/universal/flasher-macos
 
+    - name: Create Manual Release
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: manual-${{ env.VERSION }}
+        name: Manual Build (${{ env.VERSION }})
+        body: |
+          Unofficial build triggered manually
+          **Version**: ${{ env.VERSION }}
+          **Includes**:
+          - Windows executable
+          - Linux binary
+          - macOS binaries (Intel & ARM)
+          - Universal macOS binary
+        draft: true
+        prerelease: true
+        files: |
+          artifacts/flasher-x86_64.exe
+          artifacts/flasher-x86_64
+          artifacts/flasher-arm64
+          artifacts/universal/flasher-macos
