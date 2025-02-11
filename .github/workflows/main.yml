@@ -157,8 +157,8 @@ jobs:
       run: |
         mkdir -p artifacts/universal
         lipo -create \
-          artifacts/flasher-macos-arm/flasher-arm64 \
-          artifacts/flasher-macos-intel/flasher-x86_64 \
+          artifacts/flasher-arm64 \
+          artifacts/flasher-x86_64 \
           -output artifacts/universal/flasher-macos
 
     - name: Create Automated Release
