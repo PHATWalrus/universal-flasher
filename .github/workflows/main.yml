@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest, macos-13-xlarge, macos-latest-xlarge]
         include:
           - os: windows-latest
             artifact-name: windows-exe
@@ -27,20 +27,29 @@ jobs:
             dist-path: dist/
             icon: icon.png
             os-short: linux
-          - os: macos-latest
-            artifact-name: macos-bin
+          - os: macos-13-xlarge
+            artifact-name: macos-intel-bin
             dist-path: dist/
             icon: icon.icns
-            os-short: macos
+            os-short: macos-intel
+            target-arch: x86_64
+          - os: macos-latest-xlarge
+            artifact-name: macos-arm-bin
+            dist-path: dist/
+            icon: icon.icns
+            os-short: macos-arm
+            target-arch: arm64
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for all tags and branches
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.13.2'
+        python-version: '3.13.1'
 
     - name: Install dependencies
       run: |
@@ -53,9 +62,9 @@ jobs:
         pyinstaller --noconfirm --onefile --console \
           --name "flasher" \
           --icon "${{ matrix.icon }}" \
+          --target-arch ${{ matrix.target-arch }} \
           "flash.py"
         
-        # Rename output with OS identifier
         if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
           mv dist/flasher.exe dist/flasher-${{ matrix.os-short }}.exe
         else
@@ -73,6 +82,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for all tags and branches
+
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
@@ -90,7 +104,6 @@ jobs:
     - name: Generate Release Notes
       if: ${{ github.event_name == 'push' }}
       run: |
-        git fetch --prune --unshallow --tags
         PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1))
         echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
         echo "## What's Changed" >> $GITHUB_ENV
@@ -104,11 +117,19 @@ jobs:
       with:
         tag_name: ${{ github.ref }}
         name: Release ${{ github.ref_name }}
-        body: ${{ env.RELEASE_NOTES }}
+        body: |
+          ## Supported Architectures
+          - Windows (x86_64)
+          - Linux (x86_64)
+          - macOS Intel (x86_64)
+          - macOS Apple Silicon (arm64)
+
+          ${{ env.RELEASE_NOTES }}
         files: |
           artifacts/windows-exe/flasher-windows.exe
           artifacts/linux-bin/flasher-linux
-          artifacts/macos-bin/flasher-macos
+          artifacts/macos-intel-bin/flasher-macos-intel
+          artifacts/macos-arm-bin/flasher-macos-arm
 
     - name: Create Manual Build
       uses: softprops/action-gh-release@v1
@@ -120,9 +141,16 @@ jobs:
           Unofficial build triggered manually
           **Version**: ${{ env.VERSION }}
           **Build Date**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+          ## Supported Architectures
+          - Windows (x86_64)
+          - Linux (x86_64)
+          - macOS Intel (x86_64)
+          - macOS Apple Silicon (arm64)
         draft: true
         prerelease: true
         files: |
           artifacts/windows-exe/flasher-windows.exe
           artifacts/linux-bin/flasher-linux
-          artifacts/macos-bin/flasher-macos
+          artifacts/macos-intel-bin/flasher-macos-intel
+          artifacts/macos-arm-bin/flasher-macos-arm
