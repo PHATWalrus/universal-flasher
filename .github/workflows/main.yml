@@ -22,7 +22,6 @@ permissions:
 
 env:
   PYTHON_VERSION: '3.13.1'
-  BUILD_CACHE_KEY: ${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('**/requirements.txt') }}
 
 jobs:
   build:
@@ -68,9 +67,9 @@ jobs:
         path: |
           ~/.cache/pip
           venv/
-        key: ${{ env.BUILD_CACHE_KEY }}-${{ matrix.arch }}
+        key: ${{ matrix.os }}-${{ matrix.arch }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
-          ${{ env.BUILD_CACHE_KEY }}-
+          ${{ matrix.os }}-${{ matrix.arch }}-py${{ env.PYTHON_VERSION }}-
 
     - name: Install build tools
       run: |
