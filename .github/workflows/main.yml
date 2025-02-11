@@ -52,6 +52,7 @@ jobs:
         fetch-depth: 0
 
     - name: Verify icon file
+      if: matrix.os != 'windows-latest'
       run: |
         if [ ! -f "${{ env.WORKSPACE }}/${{ matrix.icon }}" ]; then
           echo "::error::Missing icon file: ${{ matrix.icon }}"
