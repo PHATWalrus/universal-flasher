@@ -1,5 +1,9 @@
 name: Build and Release
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     tags:
@@ -7,76 +11,98 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (format X.Y.Z)'     
+        description: 'Semantic version (X.Y.Z)'
         required: true
+
+permissions:
+  contents: write
+  actions: read
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-13-xlarge, macos-latest-xlarge]
         include:
           - os: windows-latest
-            artifact-name: windows-exe
-            dist-path: dist/
+            artifact: flasher-windows.exe
             icon: icon.ico
-            os-short: windows
+            arch: x86_64
           - os: ubuntu-latest
-            artifact-name: linux-bin
-            dist-path: dist/
+            artifact: flasher-linux
             icon: icon.png
-            os-short: linux
-          - os: macos-13-xlarge
-            artifact-name: macos-intel-bin
-            dist-path: dist/
+            arch: x86_64
+          - os: macos-latest
+            artifact: flasher-macos-intel
             icon: icon.icns
-            os-short: macos-intel
-            target-arch: x86_64
-          - os: macos-latest-xlarge
-            artifact-name: macos-arm-bin
-            dist-path: dist/
+            arch: x86_64
+            python-arch: x64
+          - os: macos-latest
+            artifact: flasher-macos-arm
             icon: icon.icns
-            os-short: macos-arm
-            target-arch: arm64
+            arch: arm64
+            python-arch: arm64
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Fetch all history for all tags and branches
+        fetch-depth: 0
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.13.1'
+        architecture: ${{ matrix.python-arch || 'x64' }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-${{ matrix.arch }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.arch }}-pip-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        pip install -r requirements.txt
+        pip install -r requirements.txt --no-cache-dir
 
     - name: Build executable
       run: |
-        pyinstaller --noconfirm --onefile --console \
-          --name "flasher" \
+        output_name="flasher-${{ matrix.arch }}"
+        pyinstaller \
+          --noconfirm \
+          --onefile \
+          --console \
+          --name "$output_name" \
           --icon "${{ matrix.icon }}" \
-          --target-arch ${{ matrix.target-arch }} \
-          "flash.py"
+          --distpath dist/${{ matrix.arch }} \
+          --workpath build/${{ matrix.arch }} \
+          --specpath spec/${{ matrix.arch }} \
+          flash.py
         
+        # Verify binary existence
         if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          mv dist/flasher.exe dist/flasher-${{ matrix.os-short }}.exe
+          if [ ! -f "dist/${{ matrix.arch }}/$output_name.exe" ]; then
+            echo "::error::Build failed - executable not found!"
+            exit 1
+          fi
         else
-          mv dist/flasher dist/flasher-${{ matrix.os-short }}
+          if [ ! -f "dist/${{ matrix.arch }}/$output_name" ]; then
+            echo "::error::Build failed - executable not found!"
+            exit 1
+          fi
         fi
-      shell: bash
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact-name }}
-        path: ${{ matrix.dist-path }}/flasher-${{ matrix.os-short }}*
+        name: ${{ matrix.artifact }}
+        path: |
+          dist/${{ matrix.arch }}/*
+          !**/*.spec
 
   release:
     needs: build
@@ -85,72 +111,56 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Fetch all history for all tags and branches
+        fetch-depth: 0
 
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
 
-    - name: Ensure version format (manual builds)
+    - name: Validate version format
       if: ${{ github.event_name == 'workflow_dispatch' }}
       run: |
-        if [[ "${{ inputs.version }}" != v* ]]; then
-          echo "VERSION=v${{ inputs.version }}" >> $GITHUB_ENV
-        else
-          echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+        if ! [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Invalid version format. Use X.Y.Z"
+          exit 1
         fi
+        echo "VERSION=v${{ inputs.version }}" >> $GITHUB_ENV
 
-    - name: Generate Release Notes
+    - name: Generate changelog
       if: ${{ github.event_name == 'push' }}
       run: |
-        PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1))
+        LATEST_TAG=$(git describe --tags --abbrev=0)
+        PREV_TAG=$(git describe --tags --abbrev=0 $LATEST_TAG^ 2>/dev/null || echo "")
+        
         echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-        echo "## What's Changed" >> $GITHUB_ENV
-        git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> $GITHUB_ENV
-        echo -e "\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> $GITHUB_ENV
+        echo "## Release Highlights" >> $GITHUB_ENV
+        echo "### Supported Architectures" >> $GITHUB_ENV
+        echo "- Windows (x86_64)" >> $GITHUB_ENV
+        echo "- Linux (x86_64)" >> $GITHUB_ENV
+        echo "- macOS Intel (x86_64)" >> $GITHUB_ENV
+        echo "- macOS Silicon (arm64)" >> $GITHUB_ENV
+        
+        if [ -n "$PREV_TAG" ]; then
+          echo -e "\n## Changes since $PREV_TAG\n" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" $PREV_TAG..HEAD >> $GITHUB_ENV
+          echo -e "\n[Full changelog](https://github.com/$GITHUB_REPOSITORY/compare/$PREV_TAG...$LATEST_TAG)" >> $GITHUB_ENV
+        else
+          echo -e "\n## Initial Release\n" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" >> $GITHUB_ENV
+        fi
         echo "EOF" >> $GITHUB_ENV
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
       with:
-        tag_name: ${{ github.ref }}
-        name: Release ${{ github.ref_name }}
-        body: |
-          ## Supported Architectures
-          - Windows (x86_64)
-          - Linux (x86_64)
-          - macOS Intel (x86_64)
-          - macOS Apple Silicon (arm64)
-
-          ${{ env.RELEASE_NOTES }}
+        tag_name: ${{ github.ref_name || env.VERSION }}
+        name: ${{ github.ref_name || env.VERSION }}
+        body: ${{ env.RELEASE_NOTES }}
         files: |
-          artifacts/windows-exe/flasher-windows.exe
-          artifacts/linux-bin/flasher-linux
-          artifacts/macos-intel-bin/flasher-macos-intel
-          artifacts/macos-arm-bin/flasher-macos-arm
-
-    - name: Create Manual Build
-      uses: softprops/action-gh-release@v1
-      if: ${{ github.event_name == 'workflow_dispatch' }}
-      with:
-        tag_name: manual-${{ env.VERSION }}
-        name: Manual Build (${{ env.VERSION }})
-        body: |
-          Unofficial build triggered manually
-          **Version**: ${{ env.VERSION }}
-          **Build Date**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-
-          ## Supported Architectures
-          - Windows (x86_64)
-          - Linux (x86_64)
-          - macOS Intel (x86_64)
-          - macOS Apple Silicon (arm64)
-        draft: true
-        prerelease: true
-        files: |
-          artifacts/windows-exe/flasher-windows.exe
-          artifacts/linux-bin/flasher-linux
-          artifacts/macos-intel-bin/flasher-macos-intel
-          artifacts/macos-arm-bin/flasher-macos-arm
+          artifacts/flasher-windows.exe
+          artifacts/flasher-linux
+          artifacts/flasher-macos-intel
+          artifacts/flasher-macos-arm
+        draft: ${{ github.event_name == 'workflow_dispatch' }}
+        prerelease: ${{ github.event_name == 'workflow_dispatch' }}
