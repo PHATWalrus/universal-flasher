@@ -152,17 +152,17 @@ jobs:
       run: |
         echo "Artifact structure:"
         ls -R artifacts
-        test -f artifacts/macos-arm-bin/flasher-arm64
-        test -f artifacts/macos-intel-bin/flasher-x86_64
+        test -f artifacts/flasher-macos-arm/flasher-arm64
+        test -f artifacts/flasher-macos-intel/flasher-x86_64
 
     - name: Create universal binary
       run: |
         mkdir -p artifacts/universal
         lipo -create \
-          artifacts/macos-arm-bin/flasher-arm64 \
-          artifacts/macos-intel-bin/flasher-x86_64 \
+          artifacts/flasher-macos-arm/flasher-arm64 \
+          artifacts/flasher-macos-intel/flasher-x86_64 \
           -output artifacts/universal/flasher-macos
-        file artifacts/universal/flasher-macos
+
 
 
     - name: Create release
