@@ -118,12 +118,13 @@ jobs:
           exit 1
         }
       if: matrix.os == 'windows-latest'
-
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}
-        path: dist/${{ matrix.arch }}/*
+        path: dist/${{ matrix.arch }}/flasher-${{ matrix.arch }}*
+        if-no-files-found: error
         retention-days: 7
 
   release:
@@ -134,6 +135,9 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: artifacts
+        pattern: 'flasher-*'
+        merge-multiple: true
+
 
     - name: Ensure version format (manual builds)
       if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -171,8 +175,10 @@ jobs:
           - macOS ARM: flasher-arm64
           - Universal macOS: flasher-macos
         files: |
-          artifacts/flasher-*
-          artifacts/universal/*
+            artifacts/flasher-x86_64.exe
+            artifacts/flasher-x86_64
+            artifacts/flasher-arm64
+            artifacts/universal/flasher-macos
 
     - name: Create Manual Release
       if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -191,5 +197,7 @@ jobs:
         draft: true
         prerelease: true
         files: |
-          artifacts/flasher-*
-          artifacts/universal/*
+          artifacts/flasher-x86_64.exe
+          artifacts/flasher-x86_64
+          artifacts/flasher-arm64
+          artifacts/universal/flasher-macos
