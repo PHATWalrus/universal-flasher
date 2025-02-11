@@ -15,14 +15,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
         include:
           - os: windows-latest
             artifact-name: windows-exe
             dist-path: dist/
+            icon: icon.ico
+            os-short: windows
           - os: ubuntu-latest
             artifact-name: linux-bin
             dist-path: dist/
+            icon: icon.png
+            os-short: linux
+          - os: macos-latest
+            artifact-name: macos-bin
+            dist-path: dist/
+            icon: icon.icns
+            os-short: macos
 
     steps:
     - name: Checkout code
@@ -31,7 +40,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.13.1'
+        python-version: '3.13.2'
 
     - name: Install dependencies
       run: |
@@ -41,10 +50,16 @@ jobs:
 
     - name: Build executable
       run: |
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.ico" "flash.py"
+        pyinstaller --noconfirm --onefile --console \
+          --name "flasher" \
+          --icon "${{ matrix.icon }}" \
+          "flash.py"
+        
+        # Rename output with OS identifier
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          mv dist/flasher.exe dist/flasher-${{ matrix.os-short }}.exe
         else
-          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.png" "flash.py"
+          mv dist/flasher dist/flasher-${{ matrix.os-short }}
         fi
       shell: bash
 
@@ -52,7 +67,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact-name }}
-        path: ${{ matrix.dist-path }}/flasher*
+        path: ${{ matrix.dist-path }}/flasher-${{ matrix.os-short }}*
 
   release:
     needs: build
@@ -72,19 +87,28 @@ jobs:
           echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
         fi
 
+    - name: Generate Release Notes
+      if: ${{ github.event_name == 'push' }}
+      run: |
+        git fetch --prune --unshallow --tags
+        PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1))
+        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+        echo "## What's Changed" >> $GITHUB_ENV
+        git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> $GITHUB_ENV
+        echo -e "\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
       with:
         tag_name: ${{ github.ref }}
         name: Release ${{ github.ref_name }}
-        body: |
-          Auto-generated release from CI build
-          - Windows: flasher.exe
-          - Linux: flasher
+        body: ${{ env.RELEASE_NOTES }}
         files: |
-          artifacts/windows-exe/flasher.exe
-          artifacts/linux-bin/flasher
+          artifacts/windows-exe/flasher-windows.exe
+          artifacts/linux-bin/flasher-linux
+          artifacts/macos-bin/flasher-macos
 
     - name: Create Manual Build
       uses: softprops/action-gh-release@v1
@@ -95,8 +119,10 @@ jobs:
         body: |
           Unofficial build triggered manually
           **Version**: ${{ env.VERSION }}
+          **Build Date**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
         draft: true
         prerelease: true
         files: |
-          artifacts/windows-exe/flasher.exe
-          artifacts/linux-bin/flasher
+          artifacts/windows-exe/flasher-windows.exe
+          artifacts/linux-bin/flasher-linux
+          artifacts/macos-bin/flasher-macos
