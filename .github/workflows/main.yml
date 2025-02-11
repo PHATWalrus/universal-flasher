@@ -148,8 +148,13 @@ jobs:
       with:
         path: artifacts
 
+    - name: Install lipo for Linux
+      run: |
+        wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
+        chmod +x lipo_Linux_amd64
+        sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
+
     - name: Create universal macOS binary
-      if: contains(needs.build.result, 'success')
       run: |
         mkdir -p artifacts/universal
         lipo -create \
@@ -160,7 +165,7 @@ jobs:
     - name: Create release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}
         files: |
           artifacts/flasher-*
           artifacts/universal/*
+
