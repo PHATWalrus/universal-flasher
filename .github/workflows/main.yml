@@ -147,9 +147,32 @@ jobs:
           artifacts/flasher-macos-intel/flasher-x86_64 \
           -output artifacts/universal/flasher-macos
 
-    - name: Create release
+    - name: Generate release notes
+      id: changelog
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0)
+        PREV_TAG=$(git describe --tags --abbrev=0 $LATEST_TAG^ 2>/dev/null || echo "")
+
+        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+        echo "# Release $LATEST_TAG" >> $GITHUB_ENV
+        if [ -n "$PREV_TAG" ]; then
+          echo "## Changes since $PREV_TAG" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" $PREV_TAG..HEAD >> $GITHUB_ENV
+          echo -e "\n[Full changelog](https://github.com/$GITHUB_REPOSITORY/compare/$PREV_TAG...$LATEST_TAG)" >> $GITHUB_ENV
+        else
+          echo "## Initial Release" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" >> $GITHUB_ENV
+        fi
+        echo "EOF" >> $GITHUB_ENV
+
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: ${{ env.RELEASE_NOTES }}
         files: |
           artifacts/flasher-*
-          artifacts/universal/*
+        draft: false
+        prerelease: false
+
