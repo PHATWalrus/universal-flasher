@@ -148,19 +148,22 @@ jobs:
       with:
         path: artifacts
 
-    - name: Install lipo for Linux
+    - name: Verify artifact files
       run: |
-        wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
-        chmod +x lipo_Linux_amd64
-        sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
+        echo "Artifact structure:"
+        ls -R artifacts
+        test -f artifacts/macos-arm-bin/flasher-arm64
+        test -f artifacts/macos-intel-bin/flasher-x86_64
 
-    - name: Create universal macOS binary
+    - name: Create universal binary
       run: |
         mkdir -p artifacts/universal
         lipo -create \
-          artifacts/flasher-macos-arm \
-          artifacts/flasher-macos-intel \
+          artifacts/macos-arm-bin/flasher-arm64 \
+          artifacts/macos-intel-bin/flasher-x86_64 \
           -output artifacts/universal/flasher-macos
+        file artifacts/universal/flasher-macos
+
 
     - name: Create release
       uses: softprops/action-gh-release@v1
