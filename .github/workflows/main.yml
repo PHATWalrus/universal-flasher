@@ -57,6 +57,18 @@ jobs:
           echo "::error::Missing icon file: ${{ matrix.icon }}"
           exit 1
         fi
+    - name: Verify icon file (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        if (-not (Test-Path "$env:WORKSPACE/icon.ico")) {
+          Write-Error "::error::Missing icon file: icon.ico"
+          exit 1
+        }
+        else {
+          Write-Host "✓ Icon file verified"
+        }
+      shell: pwsh
+
 
     - name: Set up Python
       uses: actions/setup-python@v5
