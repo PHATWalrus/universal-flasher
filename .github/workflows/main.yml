@@ -1,4 +1,4 @@
-name: Universal Build Pipeline
+name: Build and Release
 
 on:
   push:
@@ -7,72 +7,34 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Semantic version (X.Y.Z)'
+        description: 'Version number (format X.Y.Z)'     
         required: true
-
-env:
-  PYTHON_VERSION: '3.13.1'
-  WORKSPACE: ${{ github.workspace }}
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
         include:
-          - os: ubuntu-latest
-            arch: x86_64
-            icon: icon.png
-            artifact: flasher-linux
-            shell: bash
-            
           - os: windows-latest
-            arch: x86_64
-            icon: icon.ico
-            artifact: flasher-windows.exe
-            shell: pwsh
-
-          - os: macos-13
-            arch: x86_64
-            icon: icon.icns
-            artifact: flasher-macos-intel
-            shell: bash
-
+            artifact-name: windows-exe
+            dist-path: dist/
+          - os: ubuntu-latest
+            artifact-name: linux-bin
+            dist-path: dist/
           - os: macos-latest
-            arch: arm64
-            icon: icon.icns
-            artifact: flasher-macos-arm
-            shell: bash
+            artifact-name: macos-universal
+            dist-path: dist/
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Verify icon file
-      run: |
-        if [ ! -f "${{ env.WORKSPACE }}/${{ matrix.icon }}" ]; then
-          echo "::error::Missing icon file: ${{ matrix.icon }}"
-          exit 1
-        fi
-      if: matrix.os != 'windows-latest'
-
-    - name: Verify Windows icon
-      shell: pwsh
-      run: |
-        if (-not (Test-Path "$env:WORKSPACE/icon.ico")) {
-          Write-Error "::error::Missing icon file: icon.ico"
-          exit 1
-        }
-      if: matrix.os == 'windows-latest'
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        architecture: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+        python-version: '3.13.1'
 
     - name: Install dependencies
       run: |
@@ -80,52 +42,22 @@ jobs:
         pip install pyinstaller
         pip install -r requirements.txt
 
-    - name: Build executable (Unix)
+    - name: Build executable
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.ico" "flash.py"
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.icns" --target-arch universal2 "flash.py"
+        else
+          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.png" "flash.py"
+        fi
       shell: bash
-      run: |
-        output_name="flasher-${{ matrix.arch }}"
-        pyinstaller \
-          --noconfirm \
-          --onefile \
-          --console \
-          --name "$output_name" \
-          --icon "${{ env.WORKSPACE }}/${{ matrix.icon }}" \
-          --distpath "dist/${{ matrix.arch }}" \
-          --workpath "build/${{ matrix.arch }}" \
-          --specpath "spec/${{ matrix.os }}" \
-          "${{ env.WORKSPACE }}/flash.py"
 
-        test -f "dist/${{ matrix.arch }}/$output_name"
-      if: matrix.os != 'windows-latest'
-
-    - name: Build executable (Windows)
-      shell: pwsh
-      run: |
-        $output_name = "flasher-${{ matrix.arch }}"
-        python -m PyInstaller `
-          --noconfirm `
-          --onefile `
-          --console `
-          --name "$output_name" `
-          --icon "$env:WORKSPACE/icon.ico" `
-          --distpath "dist/${{ matrix.arch }}" `
-          --workpath "build/${{ matrix.arch }}" `
-          --specpath "spec/windows" `
-          "$env:WORKSPACE/flash.py"
-
-        if (-not (Test-Path "dist/${{ matrix.arch }}/$output_name.exe")) {
-          Write-Error "::error::Build failed for Windows"
-          exit 1
-        }
-      if: matrix.os == 'windows-latest'
-    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact }}
-        path: dist/${{ matrix.arch }}/flasher-${{ matrix.arch }}*
-        if-no-files-found: error
-        retention-days: 7
+        name: ${{ matrix.artifact-name }}
+        path: ${{ matrix.dist-path }}/flasher*
 
   release:
     needs: build
@@ -135,9 +67,6 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: artifacts
-        pattern: 'flasher-*'
-        merge-multiple: true
-
 
     - name: Ensure version format (manual builds)
       if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -147,57 +76,35 @@ jobs:
         else
           echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
         fi
-    - name: Install lipo for Linux
-      run: |
-        wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
-        chmod +x lipo_Linux_amd64
-        sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
 
-    - name: Create universal macOS binary
-      run: |
-        mkdir -p artifacts/universal
-        lipo -create \
-          artifacts/flasher-arm64 \
-          artifacts/flasher-x86_64 \
-          -output artifacts/universal/flasher-macos
-
-    - name: Create Automated Release
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    - name: Create Release
       uses: softprops/action-gh-release@v1
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
       with:
         tag_name: ${{ github.ref }}
         name: Release ${{ github.ref_name }}
         body: |
-          Production release - CI Built Assets
-          - Windows: flasher-x86_64.exe
-          - Linux: flasher-x86_64
-          - macOS Intel: flasher-x86_64
-          - macOS ARM: flasher-arm64
-          - Universal macOS: flasher-macos
+          Auto-generated release from CI build
+          - Windows: flasher.exe
+          - Linux: flasher
+          - macOS: Universal binary (ARM/Intel)
         files: |
-            artifacts/flasher-x86_64.exe
-            artifacts/flasher-x86_64
-            artifacts/flasher-arm64
-            artifacts/universal/flasher-macos
+          artifacts/windows-exe/flasher.exe
+          artifacts/linux-bin/flasher
+          artifacts/macos-universal/flasher
 
-    - name: Create Manual Release
-      if: ${{ github.event_name == 'workflow_dispatch' }}
+    - name: Create Manual Build
       uses: softprops/action-gh-release@v1
+      if: ${{ github.event_name == 'workflow_dispatch' }}
       with:
         tag_name: manual-${{ env.VERSION }}
         name: Manual Build (${{ env.VERSION }})
         body: |
           Unofficial build triggered manually
           **Version**: ${{ env.VERSION }}
-          **Includes**:
-          - Windows executable
-          - Linux binary
-          - macOS binaries (Intel & ARM)
-          - Universal macOS binary
         draft: true
         prerelease: true
         files: |
-          artifacts/flasher-x86_64.exe
-          artifacts/flasher-x86_64
-          artifacts/flasher-arm64
-          artifacts/universal/flasher-macos
+          artifacts/windows-exe/flasher.exe
+          artifacts/linux-bin/flasher
+          artifacts/macos-universal/flasher
