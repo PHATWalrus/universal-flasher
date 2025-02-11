@@ -21,7 +21,7 @@ permissions:
   packages: read
 
 env:
-  PYTHON_VERSION: '3.13.1'
+  PYTHON_VERSION: '3.13.2'
 
 jobs:
   build:
