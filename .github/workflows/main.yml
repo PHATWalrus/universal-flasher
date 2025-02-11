@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (format X.Y.Z)'     
+        description: 'Version number (format X.Y.Z)'
         required: true
 
 jobs:
@@ -19,13 +19,16 @@ jobs:
         include:
           - os: windows-latest
             artifact-name: windows-exe
-            dist-path: dist/
+            binary-name: flasher.exe
+            icon-file: icon.ico
           - os: ubuntu-latest
             artifact-name: linux-bin
-            dist-path: dist/
+            binary-name: flasher-linux
+            icon-file: icon.png
           - os: macos-latest
             artifact-name: macos-universal
-            dist-path: dist/
+            binary-name: flasher-macos
+            icon-file: icon.icns
 
     steps:
     - name: Checkout code
@@ -44,12 +47,17 @@ jobs:
 
     - name: Build executable
       run: |
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.ico" "flash.py"
-        elif [[ "$RUNNER_OS" == "macOS" ]]; then
-          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.icns" --target-arch universal2 "flash.py"
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          pyinstaller --noconfirm --onefile --console \
+            --name "${{ matrix.binary-name }}" \
+            --icon "${{ matrix.icon-file }}" \
+            --target-arch universal2 \
+            "flash.py"
         else
-          pyinstaller --noconfirm --onefile --console --name "flasher" --icon "icon.png" "flash.py"
+          pyinstaller --noconfirm --onefile --console \
+            --name "${{ matrix.binary-name }}" \
+            --icon "${{ matrix.icon-file }}" \
+            "flash.py"
         fi
       shell: bash
 
@@ -57,7 +65,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact-name }}
-        path: ${{ matrix.dist-path }}/flasher*
+        path: dist/${{ matrix.binary-name }}*
 
   release:
     needs: build
@@ -86,12 +94,12 @@ jobs:
         body: |
           Auto-generated release from CI build
           - Windows: flasher.exe
-          - Linux: flasher
-          - macOS: Universal binary (ARM/Intel)
+          - Linux: flasher-linux
+          - macOS: flasher-macos (Universal Binary)
         files: |
           artifacts/windows-exe/flasher.exe
-          artifacts/linux-bin/flasher
-          artifacts/macos-universal/flasher
+          artifacts/linux-bin/flasher-linux
+          artifacts/macos-universal/flasher-macos
 
     - name: Create Manual Build
       uses: softprops/action-gh-release@v1
@@ -106,5 +114,5 @@ jobs:
         prerelease: true
         files: |
           artifacts/windows-exe/flasher.exe
-          artifacts/linux-bin/flasher
-          artifacts/macos-universal/flasher
+          artifacts/linux-bin/flasher-linux
+          artifacts/macos-universal/flasher-macos
