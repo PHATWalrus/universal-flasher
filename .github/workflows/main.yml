@@ -25,25 +25,21 @@ jobs:
             arch: x86_64
             icon: icon.png
             artifact: flasher-linux
-            spec_path: linux
-          
+
           - os: windows-latest
             arch: x86_64
             icon: icon.ico
             artifact: flasher-windows.exe
-            spec_path: windows
 
-          - os: macos-latest
+          - os: macos-13  # Intel runner
             arch: x86_64
             icon: icon.icns
             artifact: flasher-macos-intel
-            spec_path: macos-intel
 
-          - os: macos-latest
+          - os: macos-latest  # ARM runner
             arch: arm64
             icon: icon.icns
             artifact: flasher-macos-arm
-            spec_path: macos-arm
 
     steps:
     - name: Checkout code
@@ -52,24 +48,11 @@ jobs:
         fetch-depth: 0
 
     - name: Verify icon file
-      if: matrix.os != 'windows-latest'
       run: |
         if [ ! -f "${{ env.WORKSPACE }}/${{ matrix.icon }}" ]; then
           echo "::error::Missing icon file: ${{ matrix.icon }}"
           exit 1
         fi
-    - name: Verify icon file (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        if (-not (Test-Path "$env:WORKSPACE/icon.ico")) {
-          Write-Error "::error::Missing icon file: icon.ico"
-          exit 1
-        }
-        else {
-          Write-Host "✓ Icon file verified"
-        }
-      shell: pwsh
-
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -84,7 +67,6 @@ jobs:
         pip install -r requirements.txt
 
     - name: Build executable
-      if: matrix.os != 'windows-latest'
       run: |
         output_name="flasher-${{ matrix.arch }}"
         pyinstaller \
@@ -95,69 +77,35 @@ jobs:
           --icon "${{ env.WORKSPACE }}/${{ matrix.icon }}" \
           --distpath "dist/${{ matrix.arch }}" \
           --workpath "build/${{ matrix.arch }}" \
-          --specpath "spec/${{ matrix.spec_path }}" \
+          --specpath "spec/${{ matrix.arch }}" \
+          --target-arch ${{ matrix.arch }} \
           "${{ env.WORKSPACE }}/flash.py"
 
-        # Verify output
-        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          test -f "dist/${{ matrix.arch }}/$output_name.exe"
-        else
-          test -f "dist/${{ matrix.arch }}/$output_name"
-        fi
-    - name: Build executable (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        $output_name = "flasher-x86_64"
-        python -m PyInstaller `
-          --noconfirm `
-          --onefile `
-          --console `
-          --name "$output_name" `
-          --icon "$env:WORKSPACE/icon.ico" `
-          --distpath "dist/x86_64" `
-          --workpath "build/x86_64" `
-          --specpath "spec/windows" `
-          "$env:WORKSPACE/flash.py"
-    
-        # Verify output
-        $exePath = "dist/x86_64/${output_name}.exe"
-        if (-not (Test-Path $exePath -PathType Leaf)) {
-          Write-Error "::error::Missing executable: $exePath"
-          exit 1
-        }
-      shell: pwsh
-      env:
-        WORKSPACE: ${{ github.workspace }}
-
-
+        # Verify architecture
+        lipo -info "dist/${{ matrix.arch }}/$output_name"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}
-        path: |
-          dist/${{ matrix.arch }}/*
+        path: dist/${{ matrix.arch }}/*
         retention-days: 7
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Verify artifact files
+
+      - name: Verify architectures
         run: |
-          echo "Artifact structure:"
-          ls -R artifacts
-          test -f artifacts/flasher-macos-arm/flasher-arm64
-          test -f artifacts/flasher-macos-intel/flasher-x86_64
-      - name: Install lipo for Linux
-        run: |
-          wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
-          chmod +x lipo_Linux_amd64
-          sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
+          echo "Verifying binary architectures:"
+          lipo -info artifacts/flasher-macos-arm/flasher-arm64
+          lipo -info artifacts/flasher-macos-intel/flasher-x86_64
+
       - name: Create universal binary
         run: |
           mkdir -p artifacts/universal
@@ -166,11 +114,9 @@ jobs:
             artifacts/flasher-macos-intel/flasher-x86_64 \
             -output artifacts/universal/flasher-macos
 
-
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             artifacts/flasher-*
             artifacts/universal/*
-
