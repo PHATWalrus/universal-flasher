@@ -134,7 +134,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: artifacts
-
+    - name: Install lipo for Linux
+      run: |
+        wget https://github.com/konoui/lipo/releases/latest/download/lipo_Linux_amd64
+        chmod +x lipo_Linux_amd64
+        sudo mv lipo_Linux_amd64 /usr/local/bin/lipo
     - name: Create universal macOS binary
       run: |
         mkdir -p artifacts/universal
