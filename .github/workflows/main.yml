@@ -84,6 +84,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Build executable
+      if: matrix.os != 'windows-latest'
       run: |
         output_name="flasher-${{ matrix.arch }}"
         pyinstaller \
@@ -103,6 +104,32 @@ jobs:
         else
           test -f "dist/${{ matrix.arch }}/$output_name"
         fi
+    - name: Build executable (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        $output_name = "flasher-x86_64"
+        python -m PyInstaller `
+          --noconfirm `
+          --onefile `
+          --console `
+          --name "$output_name" `
+          --icon "$env:WORKSPACE/icon.ico" `
+          --distpath "dist/x86_64" `
+          --workpath "build/x86_64" `
+          --specpath "spec/windows" `
+          "$env:WORKSPACE/flash.py"
+    
+        # Verify output
+        $exePath = "dist/x86_64/${output_name}.exe"
+        if (-not (Test-Path $exePath -PathType Leaf)) {
+          Write-Error "::error::Missing executable: $exePath"
+          exit 1
+        }
+      shell: pwsh
+      env:
+        WORKSPACE: ${{ github.workspace }}
+
+
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
