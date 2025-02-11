@@ -1,4 +1,4 @@
-name: Build and Release
+name: Release Production Builds
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,63 +13,73 @@ on:
       version:
         description: 'Semantic version (X.Y.Z)'
         required: true
+        default: '0.0.0'
 
 permissions:
   contents: write
   actions: read
+  packages: read
+
+env:
+  PYTHON_VERSION: '3.13.1'
+  BUILD_CACHE_KEY: ${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('**/requirements.txt') }}
 
 jobs:
   build:
+    name: Build (${{ matrix.os }} ${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            artifact: flasher-windows.exe
-            icon: icon.ico
-            arch: x86_64
           - os: ubuntu-latest
+            arch: x86_64
             artifact: flasher-linux
             icon: icon.png
-            arch: x86_64
           - os: macos-latest
+            arch: x86_64
             artifact: flasher-macos-intel
             icon: icon.icns
-            arch: x86_64
-            python-arch: x64
           - os: macos-latest
+            arch: arm64
             artifact: flasher-macos-arm
             icon: icon.icns
-            arch: arm64
-            python-arch: arm64
+          - os: windows-latest
+            arch: x86_64
+            artifact: flasher-windows.exe
+            icon: icon.ico
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.13.1'
-        architecture: ${{ matrix.python-arch || 'x64' }}
+        python-version: ${{ env.PYTHON_VERSION }}
+        architecture: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
 
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-${{ matrix.arch }}-pip-${{ hashFiles('requirements.txt') }}
+        path: |
+          ~/.cache/pip
+          venv/
+        key: ${{ env.BUILD_CACHE_KEY }}-${{ matrix.arch }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.arch }}-pip-
+          ${{ env.BUILD_CACHE_KEY }}-
 
-    - name: Install dependencies
+    - name: Install build tools
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
+        pip install --user pyinstaller
         pip install -r requirements.txt --no-cache-dir
 
     - name: Build executable
+      shell: bash
       run: |
         output_name="flasher-${{ matrix.arch }}"
         pyinstaller \
@@ -78,35 +88,37 @@ jobs:
           --console \
           --name "$output_name" \
           --icon "${{ matrix.icon }}" \
-          --distpath dist/${{ matrix.arch }} \
-          --workpath build/${{ matrix.arch }} \
-          --specpath spec/${{ matrix.arch }} \
+          --distpath "dist/${{ matrix.arch }}" \
+          --workpath "build/${{ matrix.arch }}" \
+          --specpath "spec/${{ matrix.arch }}" \
           flash.py
-        
-        # Verify binary existence
-        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          if [ ! -f "dist/${{ matrix.arch }}/$output_name.exe" ]; then
-            echo "::error::Build failed - executable not found!"
-            exit 1
-          fi
-        else
-          if [ ! -f "dist/${{ matrix.arch }}/$output_name" ]; then
-            echo "::error::Build failed - executable not found!"
-            exit 1
-          fi
+
+        # Validate artifact
+        artifact_path="dist/${{ matrix.arch }}/$output_name${{ matrix.os == 'windows-latest' && '.exe' || '' }}"
+        if [ ! -f "$artifact_path" ]; then
+          echo "::error::Build failed - missing $artifact_path"
+          exit 1
         fi
+        echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
 
     - name: Upload artifact
+      if: env.BUILD_SUCCESS == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}
-        path: |
-          dist/${{ matrix.arch }}/*
-          !**/*.spec
+        path: dist/${{ matrix.arch }}/*
+        retention-days: 3
 
   release:
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -118,7 +130,7 @@ jobs:
       with:
         path: artifacts
 
-    - name: Validate version format
+    - name: Validate manual version
       if: ${{ github.event_name == 'workflow_dispatch' }}
       run: |
         if ! [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -128,35 +140,34 @@ jobs:
         echo "VERSION=v${{ inputs.version }}" >> $GITHUB_ENV
 
     - name: Generate changelog
+      id: changelog
       if: ${{ github.event_name == 'push' }}
       run: |
-        LATEST_TAG=$(git describe --tags --abbrev=0)
-        PREV_TAG=$(git describe --tags --abbrev=0 $LATEST_TAG^ 2>/dev/null || echo "")
-        
-        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-        echo "## Release Highlights" >> $GITHUB_ENV
-        echo "### Supported Architectures" >> $GITHUB_ENV
-        echo "- Windows (x86_64)" >> $GITHUB_ENV
-        echo "- Linux (x86_64)" >> $GITHUB_ENV
-        echo "- macOS Intel (x86_64)" >> $GITHUB_ENV
-        echo "- macOS Silicon (arm64)" >> $GITHUB_ENV
-        
-        if [ -n "$PREV_TAG" ]; then
-          echo -e "\n## Changes since $PREV_TAG\n" >> $GITHUB_ENV
-          git log --pretty=format:"- %s [%h]" $PREV_TAG..HEAD >> $GITHUB_ENV
-          echo -e "\n[Full changelog](https://github.com/$GITHUB_REPOSITORY/compare/$PREV_TAG...$LATEST_TAG)" >> $GITHUB_ENV
-        else
-          echo -e "\n## Initial Release\n" >> $GITHUB_ENV
-          git log --pretty=format:"- %s [%h]" >> $GITHUB_ENV
-        fi
-        echo "EOF" >> $GITHUB_ENV
+        latest_tag=$(git describe --tags --abbrev=0)
+        prev_tag=$(git tag --sort=-creatordate | sed -n 2p)
 
-    - name: Create Release
+        if [ -z "$prev_tag" ]; then
+          echo "RELEASE_NOTES=## Initial Release" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" >> $GITHUB_ENV
+        else
+          echo "RELEASE_NOTES=## Changes since $prev_tag" >> $GITHUB_ENV
+          git log --pretty=format:"- %s [%h]" $prev_tag..HEAD >> $GITHUB_ENV
+          echo -e "\n[Full changelog](https://github.com/$GITHUB_REPOSITORY/compare/$prev_tag...$latest_tag)" >> $GITHUB_ENV
+        fi
+
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name || env.VERSION }}
         name: ${{ github.ref_name || env.VERSION }}
-        body: ${{ env.RELEASE_NOTES }}
+        body: |
+          ### Supported Architectures
+          - Windows x86_64
+          - Linux x86_64
+          - macOS Intel (x86_64)
+          - macOS Silicon (arm64)
+
+          ${{ env.RELEASE_NOTES }}
         files: |
           artifacts/flasher-windows.exe
           artifacts/flasher-linux
@@ -164,3 +175,4 @@ jobs:
           artifacts/flasher-macos-arm
         draft: ${{ github.event_name == 'workflow_dispatch' }}
         prerelease: ${{ github.event_name == 'workflow_dispatch' }}
+        discussion_category_name: 'Releases'
