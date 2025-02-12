@@ -50,13 +50,13 @@ jobs:
         if [[ "$RUNNER_OS" == "macOS" ]]; then
           pyinstaller --noconfirm --onefile --console \
             --name "${{ matrix.binary-name }}" \
-            --icon "${{ matrix.icon-file }}" \
+            --icon "icons/${{ matrix.icon-file }}" \
             --target-arch universal2 \
             "flash.py"
         else
           pyinstaller --noconfirm --onefile --console \
             --name "${{ matrix.binary-name }}" \
-            --icon "${{ matrix.icon-file }}" \
+            --icon "icons/${{ matrix.icon-file }}" \
             "flash.py"
         fi
       shell: bash

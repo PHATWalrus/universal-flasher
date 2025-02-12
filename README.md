@@ -118,11 +118,15 @@ jobs:
 }
 ```
 ### How to find "board" variable
-- **when in bootloader run the following command**
+- **When in bootloader run the following command**
 ```bash
 fastboot getvar product
 ```
-- **copy the value after product:**
+- **Alternatively use the following command**
+```bash
+getprop | grep -i board
+```
+- **Copy the value for `ro.product.board`:**
 
 ## Flashing Instructions 🗒️
 

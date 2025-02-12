@@ -1,53 +1,72 @@
 {
-    "devices": [
-      {
-        "model": "Nothing Phone 2",
-        "codename": "pong",
-        "board": "taro",
-        "partitions": {
-          "boot": ["boot", "vendor_boot", "dtbo", "recovery"],
-          "firmware": ["abl", "aop", "aop_config", "bluetooth", "cpucp", "devcfg", "dsp", "featenabler", "hyp", "imagefv", "keymaster", "modem", "multiimgoem", "multiimgqti", "qupfw", "qweslicstore", "shrm", "tz", "uefi", "uefisecapp", "xbl", "xbl_config", "xbl_ramdump"],
-          "logical": ["system", "system_ext", "product", "vendor", "vendor_dlkm", "odm"],
-          "vbmeta": ["vbmeta","vbmeta_system", "vbmeta_vendor"]
+  "supported_devices": {
+    "Nothing": {
+      "devices": [
+        {
+          "model": "Nothing Phone 1",
+          "codename": "Spacewar",
+          "board": "Spacewar",
+          "partitions": {
+            "boot": ["boot", "vendor_boot", "dtbo"],
+            "firmware": ["abl", "aop", "bluetooth", "cpucp", "devcfg", "dsp", "dtbo", "featenabler", "hyp", "imagefv", "keymaster", "modem", "multiimgoem", "qupfw", "shrm", "tz", "uefisecapp", "xbl", "xbl_config"],
+            "logical": ["system", "system_ext", "product", "vendor", "odm"],
+            "vbmeta": ["vbmeta_system", "vbmeta"]
+          },
+          "slot_specific": ["boot", "vendor_boot", "dtbo"]
         },
-        "slot_specific": ["boot", "vendor_boot", "dtbo", "recovery"]
-      },
-      {
-        "model": "Nothing Phone 1",
-        "codename": "Spacewar",
-        "board": "Spacewar",
-        "partitions": {
-          "boot": ["boot", "vendor_boot", "dtbo"],
-          "firmware": ["abl", "aop", "bluetooth", "cpucp", "devcfg", "dsp", "dtbo", "featenabler", "hyp", "imagefv", "keymaster", "modem", "multiimgoem", "qupfw", "shrm", "tz", "uefisecapp", "xbl", "xbl_config"],
-          "logical": ["system", "system_ext", "product", "vendor", "odm"],
-          "vbmeta": ["vbmeta_system","vbmeta"]
+        {
+          "model": "Nothing Phone 2",
+          "codename": "Pong",
+          "board": "taro",
+          "partitions": {
+            "boot": ["boot", "vendor_boot", "dtbo", "recovery"],
+            "firmware": ["abl", "aop", "aop_config", "bluetooth", "cpucp", "devcfg", "dsp", "featenabler", "hyp", "imagefv", "keymaster", "modem", "multiimgoem", "multiimgqti", "qupfw", "qweslicstore", "shrm", "tz", "uefi", "uefisecapp", "xbl", "xbl_config", "xbl_ramdump"],
+            "logical": ["system", "system_ext", "product", "vendor", "vendor_dlkm", "odm"],
+            "vbmeta": ["vbmeta", "vbmeta_system", "vbmeta_vendor"]
+          },
+          "slot_specific": ["boot", "vendor_boot", "dtbo", "recovery"]
         },
-        "slot_specific": ["boot", "vendor_boot", "dtbo"]
-      },
-      {
-        "model": "Nothing Phone 2a",
-        "codename": "Pacman",
-        "board": "taro",
-        "partitions": {
-          "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
-          "firmware": ["apusys", "audio_dsp", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcf_ota", "mcupm", "md1img", "mvpu_algo", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
-          "logical": ["odm_dlkm", "odm", "vendor_dlkm", "product", "vendor", "system_dlkm", "system_ext", "system"],
-          "vbmeta": ["vbmeta","preloader_raw", "vbmeta_system", "vbmeta_vendor"]
+        {
+          "model": "Nothing Phone 2a",
+          "codename": "Pacman",
+          "board": "Pacman",
+          "partitions": {
+            "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
+            "firmware": ["apusys", "audio_dsp", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcf_ota", "mcupm", "md1img", "mvpu_algo", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
+            "logical": ["odm_dlkm", "odm", "vendor_dlkm", "product", "vendor", "system_dlkm", "system_ext", "system"],
+            "vbmeta": ["vbmeta", "preloader_raw", "vbmeta_system", "vbmeta_vendor"]
+          },
+          "slot_specific": ["boot", "dtbo", "init_boot", "vendor_boot"]
         },
-        "slot_specific": ["boot", "dtbo", "init_boot", "vendor_boot"]
-      },
-      {
-        "model": "CMF Phone 1",
-        "codename": "Tetris",
-        "board": "kalama",
-        "partitions": {
-          "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
-          "firmware": ["apusys", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcupm", "modem", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
-          "logical": ["odm_dlkm", "odm", "vendor_dlkm", "product", "vendor", "system_dlkm", "system_ext", "system"],
-          "vbmeta": ["vbmeta","preloader_raw", "vbmeta_system", "vbmeta_vendor"]
-        },
-        "slot_specific": ["boot", "dtbo", "init_boot", "vendor_boot"]
-      }
-    ]
+        {
+          "model": "Nothing Phone 2a Plus",
+          "codename": "PacmanPro",
+          "board": "PacmanPro",
+          "partitions": {
+            "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
+            "firmware": ["apusys", "audio_dsp", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcf_ota", "mcupm", "md1img", "mvpu_algo", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
+            "logical": ["odm_dlkm", "odm", "vendor_dlkm", "product", "vendor", "system_dlkm", "system_ext", "system"],
+            "vbmeta": ["vbmeta", "preloader_raw", "vbmeta_system", "vbmeta_vendor"]
+          },
+          "slot_specific": ["boot", "dtbo", "init_boot", "vendor_boot"]
+        }
+      ]
+    },
+    "CMF by Nothing": {
+      "devices": [
+        {
+          "model": "CMF Phone 1",
+          "codename": "Tetris",
+          "board": "Tetris",
+          "partitions": {
+            "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
+            "firmware": ["apusys", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcupm", "modem", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
+            "logical": ["odm_dlkm", "odm", "vendor_dlkm", "product", "vendor", "system_dlkm", "system_ext", "system"],
+            "vbmeta": ["vbmeta", "preloader_raw", "vbmeta_system", "vbmeta_vendor"]
+          },
+          "slot_specific": ["boot", "dtbo", "init_boot", "vendor_boot"]
+        }
+      ]
+    }
   }
-  
+}
