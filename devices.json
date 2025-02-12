@@ -27,7 +27,7 @@
       {
         "model": "Nothing Phone 2a",
         "codename": "Pacman",
-        "board": "taro",
+        "board": "k6886v1_64",
         "partitions": {
           "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
           "firmware": ["apusys", "audio_dsp", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcf_ota", "mcupm", "md1img", "mvpu_algo", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
@@ -39,7 +39,7 @@
       {
         "model": "CMF Phone 1",
         "codename": "Tetris",
-        "board": "kalama",
+        "board": "k6878v1_64",
         "partitions": {
           "boot": ["boot", "dtbo", "init_boot", "vendor_boot"],
           "firmware": ["apusys", "ccu", "connsys_bt", "connsys_gnss", "connsys_wifi", "dpm", "gpueb", "gz", "lk", "logo", "mcupm", "modem", "pi_img", "scp", "spmfw", "sspm", "tee", "vcp"],
